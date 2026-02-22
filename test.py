@@ -1,0 +1,17 @@
+from ultralytics import YOLO
+
+
+def main():
+    model = YOLO("runs/detect/runs/helmet_yolo12m_refine/weights/best.pt")
+
+    metrics = model.val(
+        data="data/data.yaml",
+        split="test",  # 🔥 THIS IS IMPORTANT
+        workers=0,
+    )
+
+    print(metrics)
+
+
+if __name__ == "__main__":
+    main()
