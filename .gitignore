@@ -188,6 +188,13 @@ Test Images/
 Test Videos/
 venv/
 
+Old Pipeline/
+
+New Workspace/data/
+New Workspace/runs/
+
+.env
+
 *.pt
 *.mp4
 *.jpg
