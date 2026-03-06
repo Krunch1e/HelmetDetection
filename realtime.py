@@ -4,14 +4,11 @@ import time
 
 MODEL_PATH = "runs/detect/runs/helmet_yolo12m_refine/weights/best.pt"
 
-# Track counted violations
 counted_ids = set()
 
-# Track how long each ID has been seen
 id_frame_count = {}
 
-# Minimum frames required before counting violation
-MIN_FRAMES = 15  # increase to 20–25 if you want stricter counting
+MIN_FRAMES = 15
 
 
 def main():
@@ -33,7 +30,7 @@ def main():
 
         current_ids = set()
 
-        results = model.track(frame, conf=0.4, persist=True, verbose=False)
+        results = model.track(frame, conf=0.7, iou=0.6, persist=True, verbose=False)
 
         for result in results:
             boxes = result.boxes
@@ -41,7 +38,6 @@ def main():
             if boxes.id is None:
                 continue
 
-            # Collect currently visible IDs
             current_ids.update([int(i) for i in boxes.id])
 
             for box, track_id in zip(boxes, boxes.id):
@@ -56,10 +52,8 @@ def main():
                 else:
                     color = (0, 0, 255)
 
-                    # Count frames seen for this ID
                     id_frame_count[track_id] = id_frame_count.get(track_id, 0) + 1
 
-                    # Only count if visible long enough
                     if (
                         id_frame_count[track_id] >= MIN_FRAMES
                         and track_id not in counted_ids
@@ -79,12 +73,10 @@ def main():
                     2,
                 )
 
-        # Cleanup IDs that disappeared
         for tracked_id in list(id_frame_count.keys()):
             if tracked_id not in current_ids:
                 id_frame_count.pop(tracked_id)
 
-        # FPS calculation
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time) if prev_time else 0
         prev_time = curr_time
