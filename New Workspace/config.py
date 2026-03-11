@@ -1,0 +1,18 @@
+from pathlib import Path
+
+BASE_DIR = Path(__file__).parent
+MODEL_PATH = BASE_DIR / "train" / "weights" / "best.pt"
+VIOLATION_DIR = BASE_DIR / "violations"
+
+CONF_THRESHOLD = 0.4
+IOU_THRESHOLD = 0.5
+
+HEAD_REGION_RATIO = 0.4
+
+HELMET_RATIO_MIN = 0.6
+HELMET_RATIO_MAX = 1.6
+
+VOTE_WINDOW = 10
+
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
