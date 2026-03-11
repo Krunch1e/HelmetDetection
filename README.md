@@ -40,6 +40,7 @@ VERSION=1
 ## Running the API
 
 ```bash
+cd "HelmetDetection/New Workspace"
 uvicorn main:app --reload
 ```
 
