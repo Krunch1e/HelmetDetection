@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HelmetGuard — Violation Detection System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600;700&family=Barlow+Condensed:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1117;
+    --surface2: #141b24;
+    --border: #1e2d3d;
+    --accent: #00e5ff;
+    --danger: #ff3b3b;
+    --success: #00ff88;
+    --warning: #ffb800;
+    --text: #c9d1d9;
+    --text-dim: #4a5568;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Barlow', sans-serif;
+    --display: 'Barlow Condensed', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
+  body::before {
+    content: '';
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,229,255,0.012) 2px, rgba(0,229,255,0.012) 4px);
+    pointer-events: none; z-index: 1000;
+  }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px; position: sticky; top: 0;
+    background: rgba(8,12,16,0.95); backdrop-filter: blur(10px); z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon {
+    width: 32px; height: 32px; border: 2px solid var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: rgba(0,229,255,0.1);
+  }
+  .logo-text { font-family: var(--display); font-size: 1.4rem; font-weight: 900; letter-spacing: 0.1em; color: #fff; }
+  .logo-text span { color: var(--accent); }
+  .status-bar { display: flex; align-items: center; gap: 1.5rem; font-family: var(--mono); font-size: 0.75rem; }
+  .status-indicator { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); }
+  .status-dot.online { background: var(--success); box-shadow: 0 0 8px var(--success); animation: pulse 2s infinite; }
+  .status-dot.offline { background: var(--danger); }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  .app { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 64px); }
+  .sidebar { border-right: 1px solid var(--border); padding: 1.5rem 0; position: sticky; top: 64px; height: calc(100vh - 64px); overflow-y: auto; }
+  .nav-section { padding: 0 1rem 1rem; }
+  .nav-label { font-family: var(--mono); font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.15em; text-transform: uppercase; padding: 0 0.5rem; margin-bottom: 0.5rem; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 0.6rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; color: var(--text-dim); transition: all 0.15s; border: 1px solid transparent; margin-bottom: 2px; }
+  .nav-item:hover { color: var(--text); background: var(--surface2); border-color: var(--border); }
+  .nav-item.active { color: var(--accent); background: rgba(0,229,255,0.08); border-color: rgba(0,229,255,0.2); }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .sidebar-stats { margin: 1rem; padding: 1rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { color: var(--text-dim); font-family: var(--mono); font-size: 0.7rem; }
+  .stat-value { font-family: var(--mono); font-weight: 600; color: var(--accent); }
+  .stat-value.danger { color: var(--danger); }
+  main { padding: 2rem; overflow-y: auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .panel-header { margin-bottom: 2rem; }
+  .panel-title { font-family: var(--display); font-size: 2rem; font-weight: 900; letter-spacing: 0.05em; color: #fff; line-height: 1; }
+  .panel-subtitle { font-size: 0.875rem; color: var(--text-dim); margin-top: 0.4rem; font-family: var(--mono); }
+  .webcam-grid { display: grid; grid-template-columns: 1fr 280px; gap: 1.5rem; }
+  .feed-container { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; position: relative; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; }
+  .feed-container img { width: 100%; height: 100%; object-fit: contain; display: none; }
+  .feed-container img.visible { display: block; }
+  .feed-placeholder { text-align: center; color: var(--text-dim); }
+  .feed-placeholder svg { width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.3; }
+  .feed-placeholder p { font-family: var(--mono); font-size: 0.8rem; }
+  .feed-overlay { position: absolute; top: 12px; left: 12px; }
+  .feed-badge { font-family: var(--mono); font-size: 0.65rem; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.1em; }
+  .feed-badge.live { background: var(--danger); color: #fff; animation: pulse 1.5s infinite; }
+  .webcam-controls { display: flex; flex-direction: column; gap: 1rem; }
+  .control-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; }
+  .control-card h3 { font-family: var(--display); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 1rem; }
+  .violation-counter { text-align: center; padding: 1rem 0; }
+  .violation-number { font-family: var(--display); font-size: 4rem; font-weight: 900; color: var(--danger); line-height: 1; text-shadow: 0 0 30px rgba(255,59,59,0.4); }
+  .violation-number.safe { color: var(--success); text-shadow: 0 0 30px rgba(0,255,136,0.4); }
+  .violation-label { font-family: var(--mono); font-size: 0.7rem; color: var(--text-dim); margin-top: 0.25rem; letter-spacing: 0.1em; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0.6rem 1.25rem; border-radius: 6px; font-size: 0.8rem; font-family: var(--mono); font-weight: 600; letter-spacing: 0.05em; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; width: 100%; }
+  .btn svg { width: 14px; height: 14px; }
+  .btn-primary { background: var(--accent); color: #000; border-color: var(--accent); }
+  .btn-primary:hover { background: #00b8d4; box-shadow: 0 0 20px rgba(0,229,255,0.3); }
+  .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+  .btn-danger:hover { background: rgba(255,59,59,0.1); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
+  .btn-ghost:hover { background: var(--surface2); border-color: var(--text-dim); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .upload-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .upload-card-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .upload-card-header svg { width: 18px; height: 18px; color: var(--accent); }
+  .upload-card-title { font-family: var(--display); font-size: 1rem; font-weight: 700; letter-spacing: 0.05em; }
+  .upload-card-body { padding: 1.25rem; }
+  .drop-zone { border: 2px dashed var(--border); border-radius: 6px; padding: 2rem 1rem; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 1rem; position: relative; }
+  .drop-zone:hover { border-color: var(--accent); background: rgba(0,229,255,0.04); }
+  .drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-zone svg { width: 32px; height: 32px; color: var(--text-dim); margin-bottom: 0.75rem; }
+  .drop-zone p { font-size: 0.8rem; color: var(--text-dim); font-family: var(--mono); }
+  .drop-zone .filename { color: var(--accent); margin-top: 0.5rem; font-size: 0.75rem; }
+  .result-area { margin-top: 1rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; display: none; }
+  .result-area.visible { display: block; }
+  .result-area img, .result-area video { width: 100%; display: block; }
+  .result-stats { padding: 0.75rem 1rem; display: flex; gap: 1rem; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 0.75rem; flex-wrap: wrap; }
+  .result-stat { display: flex; align-items: center; gap: 6px; }
+  .result-stat .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .radio-group { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  .radio-option { flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; text-align: center; font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim); transition: all 0.15s; }
+  .radio-option.selected { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.08); }
+  .radio-option input { display: none; }
+  .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
+  .gallery-item { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.2s; }
+  .gallery-item:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+  .gallery-item img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
+  .gallery-item-info { padding: 0.6rem 0.75rem; font-family: var(--mono); font-size: 0.65rem; color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
+  .gallery-empty { grid-column: 1/-1; text-align: center; padding: 4rem; color: var(--text-dim); font-family: var(--mono); font-size: 0.8rem; }
+  .loading { display: none; align-items: center; gap: 8px; font-family: var(--mono); font-size: 0.75rem; color: var(--accent); margin-top: 0.75rem; }
+  .loading.visible { display: flex; }
+  .spinner { width: 14px; height: 14px; border: 2px solid rgba(0,229,255,0.2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .progress-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: 0.75rem; overflow: hidden; display: none; }
+  .progress-bar.visible { display: block; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; box-shadow: 0 0 8px var(--accent); }
+  .toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; }
+  .toast { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; font-family: var(--mono); font-size: 0.75rem; display: flex; align-items: center; gap: 8px; animation: slideIn 0.2s ease; max-width: 300px; }
+  .toast.success { border-left: 3px solid var(--success); }
+  .toast.error { border-left: 3px solid var(--danger); }
+  .toast.info { border-left: 3px solid var(--accent); }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  .modal-overlay.visible { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; max-width: 800px; width: 90%; overflow: hidden; }
+  .modal img { width: 100%; display: block; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" stroke-width="2.5">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <span class="logo-text">HELMET<span>GUARD</span></span>
+  </div>
+  <div class="status-bar">
+    <div class="status-indicator">
+      <div class="status-dot" id="apiDot"></div>
+      <span id="apiStatus">CHECKING...</span>
+    </div>
+    <span style="color:var(--text-dim);font-size:0.7rem;">API: localhost:8000</span>
+  </div>
+</header>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="nav-section">
+      <div class="nav-label">Detection</div>
+      <div class="nav-item active" onclick="switchPanel('webcam',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M22 12a10 10 0 11-20 0 10 10 0 0120 0z"/></svg>
+        Live Webcam
+      </div>
+      <div class="nav-item" onclick="switchPanel('upload',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload Media
+      </div>
+      <div class="nav-item" onclick="switchPanel('gallery',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        Violations
+      </div>
+    </div>
+    <div class="sidebar-stats">
+      <div class="nav-label" style="padding:0;margin-bottom:0.75rem;">System Stats</div>
+      <div class="stat-row">
+        <span class="stat-label">ACTIVE VIOLATIONS</span>
+        <span class="stat-value danger" id="sidebarViolations">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">WEBCAM</span>
+        <span class="stat-value" id="sidebarWebcam">OFF</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">SNAPSHOTS SAVED</span>
+        <span class="stat-value" id="sidebarSnapshots">—</span>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <!-- Webcam -->
+    <div id="panel-webcam" class="panel active">
+      <div class="panel-header">
+        <div class="panel-title">LIVE FEED</div>
+        <div class="panel-subtitle">// real-time helmet violation detection</div>
+      </div>
+      <div class="webcam-grid">
+        <div class="feed-container" id="feedContainer">
+          <div class="feed-placeholder" id="feedPlaceholder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M22 12a10 10 0 11-20 0 10 10 0 0120 0z"/></svg>
+            <p>STREAM INACTIVE</p>
+            <p style="margin-top:0.25rem;font-size:0.7rem;">Click START to begin detection</p>
+          </div>
+          <img id="webcamFeed" alt="Live Feed">
+          <div class="feed-overlay">
+            <span class="feed-badge live" id="liveBadge" style="display:none;">● LIVE</span>
+          </div>
+        </div>
+        <div class="webcam-controls">
+          <div class="control-card">
+            <h3>Stream Control</h3>
+            <div style="display:flex;flex-direction:column;gap:0.5rem;">
+              <button class="btn btn-primary" id="startBtn" onclick="startWebcam()">
+                <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                START STREAM
+              </button>
+              <button class="btn btn-danger" id="stopBtn" onclick="stopWebcam()" disabled>
+                <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+                STOP STREAM
+              </button>
+            </div>
+          </div>
+          <div class="control-card">
+            <h3>Active Violations</h3>
+            <div class="violation-counter">
+              <div class="violation-number safe" id="violationCount">0</div>
+              <div class="violation-label">RIDERS WITHOUT HELMET</div>
+            </div>
+          </div>
+          <div class="control-card">
+            <h3>Detection Info</h3>
+            <div style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);line-height:1.9;">
+              <div>MODEL &nbsp;&nbsp;YOLO26m</div>
+              <div>CLASSES &nbsp;helmet / no-helmet / rider</div>
+              <div>TRACKER &nbsp;BotSort</div>
+              <div>mAP50 &nbsp;&nbsp;0.956</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload -->
+    <div id="panel-upload" class="panel">
+      <div class="panel-header">
+        <div class="panel-title">UPLOAD MEDIA</div>
+        <div class="panel-subtitle">// process images and videos for violation detection</div>
+      </div>
+      <div class="upload-grid">
+        <div class="upload-card">
+          <div class="upload-card-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span class="upload-card-title">IMAGE ANALYSIS</span>
+          </div>
+          <div class="upload-card-body">
+            <div class="drop-zone">
+              <input type="file" accept="image/*" id="imageInput" onchange="handleImageSelect(event)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <p>Drop image here or click to browse</p>
+              <p class="filename" id="imageFilename"></p>
+            </div>
+            <button class="btn btn-primary" id="imageUploadBtn" onclick="uploadImage()" disabled>ANALYSE IMAGE</button>
+            <div class="loading" id="imageLoading"><div class="spinner"></div><span>Processing...</span></div>
+            <div class="result-area" id="imageResult">
+              <img id="imageResultImg" alt="Result">
+              <div class="result-stats" id="imageResultStats"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="upload-card">
+          <div class="upload-card-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+            <span class="upload-card-title">VIDEO ANALYSIS</span>
+          </div>
+          <div class="upload-card-body">
+            <div class="radio-group">
+              <label class="radio-option selected" id="opt-video" onclick="selectVideoOutput('video')">
+                <input type="radio" name="videoOutput" value="video" checked>ANNOTATED VIDEO
+              </label>
+              <label class="radio-option" id="opt-snapshots" onclick="selectVideoOutput('snapshots')">
+                <input type="radio" name="videoOutput" value="snapshots">SNAPSHOTS + STATS
+              </label>
+            </div>
+            <div class="drop-zone">
+              <input type="file" accept="video/*" id="videoInput" onchange="handleVideoSelect(event)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+              <p>Drop video here or click to browse</p>
+              <p class="filename" id="videoFilename"></p>
+            </div>
+            <button class="btn btn-primary" id="videoUploadBtn" onclick="uploadVideo()" disabled>ANALYSE VIDEO</button>
+            <div class="loading" id="videoLoading"><div class="spinner"></div><span id="videoLoadingText">Processing video...</span></div>
+            <div class="progress-bar" id="videoProgress"><div class="progress-fill" id="videoProgressFill" style="width:0%"></div></div>
+            <div class="result-area" id="videoResult">
+              <video id="videoResultPlayer" controls></video>
+              <div class="result-stats" id="videoResultStats"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gallery -->
+    <div id="panel-gallery" class="panel">
+      <div class="panel-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div class="panel-title">VIOLATION GALLERY</div>
+          <div class="panel-subtitle">// saved violation snapshots</div>
+        </div>
+        <button class="btn btn-ghost" style="width:auto;" onclick="loadGallery()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+          REFRESH
+        </button>
+      </div>
+      <div class="gallery-grid" id="galleryGrid">
+        <div class="gallery-empty">No violations saved yet.</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <img id="modalImg" src="" alt="">
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+  const API = 'http://localhost:8000';
+  let statsInterval = null;
+  let selectedImageFile = null;
+  let selectedVideoFile = null;
+  let videoOutputMode = 'video';
+
+  async function checkAPI() {
+    try {
+      const res = await fetch(`${API}/stats`);
+      if (res.ok) {
+        document.getElementById('apiDot').className = 'status-dot online';
+        document.getElementById('apiStatus').textContent = 'ONLINE';
+        updateSidebarStats();
+      }
+    } catch {
+      document.getElementById('apiDot').className = 'status-dot offline';
+      document.getElementById('apiStatus').textContent = 'OFFLINE';
+    }
+  }
+
+  async function updateSidebarStats() {
+    try {
+      const [sRes, vRes] = await Promise.all([fetch(`${API}/stats`), fetch(`${API}/violations`)]);
+      const stats = await sRes.json();
+      const violations = await vRes.json();
+      document.getElementById('sidebarViolations').textContent = stats.active_violations;
+      document.getElementById('sidebarSnapshots').textContent = violations.violations.length;
+      const count = document.getElementById('violationCount');
+      count.textContent = stats.active_violations;
+      count.className = stats.active_violations > 0 ? 'violation-number' : 'violation-number safe';
+    } catch {}
+  }
+
+  function switchPanel(name, el) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById(`panel-${name}`).classList.add('active');
+    el.classList.add('active');
+    if (name === 'gallery') loadGallery();
+  }
+
+  async function startWebcam() {
+    try {
+      await fetch(`${API}/stream/start`, { method: 'POST' });
+      const feed = document.getElementById('webcamFeed');
+      feed.src = `${API}/stream/webcam`;
+      feed.className = 'visible';
+      document.getElementById('feedPlaceholder').style.display = 'none';
+      document.getElementById('liveBadge').style.display = 'inline-flex';
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('stopBtn').disabled = false;
+      document.getElementById('sidebarWebcam').textContent = 'ON';
+      statsInterval = setInterval(updateSidebarStats, 1500);
+      toast('Stream started', 'success');
+    } catch { toast('Failed to start — is the API running?', 'error'); }
+  }
+
+  async function stopWebcam() {
+    try {
+      await fetch(`${API}/stream/stop`, { method: 'POST' });
+      const feed = document.getElementById('webcamFeed');
+      feed.src = ''; feed.className = '';
+      document.getElementById('feedPlaceholder').style.display = 'block';
+      document.getElementById('liveBadge').style.display = 'none';
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = true;
+      document.getElementById('sidebarWebcam').textContent = 'OFF';
+      if (statsInterval) clearInterval(statsInterval);
+      toast('Stream stopped', 'info');
+    } catch { toast('Error stopping stream', 'error'); }
+  }
+
+  function handleImageSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    selectedImageFile = file;
+    document.getElementById('imageFilename').textContent = file.name;
+    document.getElementById('imageUploadBtn').disabled = false;
+  }
+
+  async function uploadImage() {
+    if (!selectedImageFile) return;
+    const loading = document.getElementById('imageLoading');
+    const result = document.getElementById('imageResult');
+    const btn = document.getElementById('imageUploadBtn');
+    loading.classList.add('visible'); result.classList.remove('visible'); btn.disabled = true;
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedImageFile);
+      const res = await fetch(`${API}/upload/image`, { method: 'POST', body: formData });
+      if (!res.ok) throw new Error();
+      const violations = res.headers.get('X-Violation-Count') || '0';
+      const blob = await res.blob();
+      document.getElementById('imageResultImg').src = URL.createObjectURL(blob);
+      document.getElementById('imageResultStats').innerHTML = `
+        <div class="result-stat"><div class="dot" style="background:${parseInt(violations)>0?'var(--danger)':'var(--success)'}"></div><span>${violations} violation(s) detected</span></div>
+        <div class="result-stat"><div class="dot" style="background:var(--accent)"></div><span>${selectedImageFile.name}</span></div>`;
+      result.classList.add('visible');
+      toast(`${violations} violation(s) found`, parseInt(violations) > 0 ? 'error' : 'success');
+    } catch { toast('Image processing failed', 'error'); }
+    finally { loading.classList.remove('visible'); btn.disabled = false; }
+  }
+
+  function handleVideoSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    selectedVideoFile = file;
+    document.getElementById('videoFilename').textContent = file.name;
+    document.getElementById('videoUploadBtn').disabled = false;
+  }
+
+  function selectVideoOutput(mode) {
+    videoOutputMode = mode;
+    document.getElementById('opt-video').className = mode==='video' ? 'radio-option selected' : 'radio-option';
+    document.getElementById('opt-snapshots').className = mode==='snapshots' ? 'radio-option selected' : 'radio-option';
+  }
+
+  async function uploadVideo() {
+    if (!selectedVideoFile) return;
+    const loading = document.getElementById('videoLoading');
+    const progress = document.getElementById('videoProgress');
+    const result = document.getElementById('videoResult');
+    const btn = document.getElementById('videoUploadBtn');
+    loading.classList.add('visible'); progress.classList.add('visible'); result.classList.remove('visible'); btn.disabled = true;
+    document.getElementById('videoLoadingText').textContent = videoOutputMode==='video' ? 'Processing video...' : 'Analysing frames...';
+    let prog = 0;
+    const pi = setInterval(() => {
+      prog = Math.min(prog + Math.random() * 2.5, 88);
+      document.getElementById('videoProgressFill').style.width = prog + '%';
+    }, 400);
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedVideoFile);
+      const res = await fetch(`${API}/upload/video?output=${videoOutputMode}`, { method: 'POST', body: formData });
+      if (!res.ok) throw new Error();
+      clearInterval(pi);
+      document.getElementById('videoProgressFill').style.width = '100%';
+      if (videoOutputMode === 'video') {
+        const blob = await res.blob();
+        const player = document.getElementById('videoResultPlayer');
+        player.src = URL.createObjectURL(blob);
+        player.style.display = 'block';
+        document.getElementById('videoResultStats').innerHTML = `<div class="result-stat"><div class="dot" style="background:var(--success)"></div><span>Annotated video ready — click play</span></div>`;
+        result.classList.add('visible');
+        toast('Video processed successfully', 'success');
+      } else {
+        const data = await res.json();
+        document.getElementById('videoResultPlayer').style.display = 'none';
+        document.getElementById('videoResultStats').innerHTML = `
+          <div class="result-stat"><div class="dot" style="background:var(--danger)"></div><span>${data.total_violations} violation(s)</span></div>
+          <div class="result-stat"><div class="dot" style="background:var(--accent)"></div><span>${data.frames_processed} frames</span></div>
+          <div class="result-stat"><div class="dot" style="background:var(--warning)"></div><span>${data.snapshots.length} snapshot(s) saved</span></div>`;
+        result.classList.add('visible');
+        toast(`${data.total_violations} violation(s) in ${data.frames_processed} frames`, 'info');
+      }
+    } catch { clearInterval(pi); toast('Video processing failed', 'error'); }
+    finally {
+      loading.classList.remove('visible');
+      setTimeout(() => { progress.classList.remove('visible'); document.getElementById('videoProgressFill').style.width='0%'; }, 1000);
+      btn.disabled = false;
+    }
+  }
+
+  async function loadGallery() {
+    try {
+      const res = await fetch(`${API}/violations`);
+      const data = await res.json();
+      const grid = document.getElementById('galleryGrid');
+      if (data.violations.length === 0) { grid.innerHTML = '<div class="gallery-empty">No violations saved yet.</div>'; return; }
+      grid.innerHTML = data.violations.map((url, i) => `
+        <div class="gallery-item" onclick="openModal('${API}${url}')">
+          <img src="${API}${url}" alt="Violation ${i+1}" loading="lazy">
+          <div class="gallery-item-info">
+            <div style="width:6px;height:6px;border-radius:50%;background:var(--danger);flex-shrink:0;"></div>
+            VIOLATION_${String(i+1).padStart(3,'0')}
+          </div>
+        </div>`).join('');
+      document.getElementById('sidebarSnapshots').textContent = data.violations.length;
+    } catch { toast('Failed to load gallery', 'error'); }
+  }
+
+  function openModal(src) { document.getElementById('modalImg').src = src; document.getElementById('modalOverlay').classList.add('visible'); }
+  function closeModal() { document.getElementById('modalOverlay').classList.remove('visible'); }
+
+  function toast(message, type='info') {
+    const container = document.getElementById('toastContainer');
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = message;
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+
+  checkAPI();
+  setInterval(checkAPI, 10000);
+</script>
+</body>
+</html>
