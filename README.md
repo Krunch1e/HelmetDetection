@@ -1,6 +1,6 @@
 # Helmet Violation Detection System
 
-An AI-based motorcycle helmet detection system using YOLOv8 object detection. Detects riders, helmets, and helmet violations from images, videos, and live webcam feeds.
+An AI-based motorcycle helmet detection system using YOLOv11 object detection. Detects riders, helmets, and helmet violations from images, videos, and live webcam feeds.
 
 ## Project Structure
 
